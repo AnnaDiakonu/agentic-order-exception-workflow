@@ -1,0 +1,29 @@
+[
+  {
+    "block_event_id": "EVT-DEMO-001",
+    "order_id": "ORD-DEMO-001",
+    "customer_id": "CUST-DEMO-001",
+    "block_reason": "credit_limit_exceeded",
+    "order_value": 120000,
+    "currency": "EUR",
+    "hard_stop_flag": false
+  },
+  {
+    "block_event_id": "EVT-DEMO-002",
+    "order_id": "ORD-DEMO-002",
+    "customer_id": "CUST-DEMO-002",
+    "block_reason": "credit_exposure_exceeded",
+    "order_value": 180000,
+    "currency": "EUR",
+    "hard_stop_flag": true
+  },
+  {
+    "block_event_id": "EVT-DEMO-003",
+    "order_id": "ORD-DEMO-003",
+    "customer_id": "CUST-DEMO-003",
+    "block_reason": "credit_limit_exceeded",
+    "order_value": 160000,
+    "currency": "EUR",
+    "hard_stop_flag": null
+  }
+]
