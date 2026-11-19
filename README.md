@@ -2,7 +2,7 @@
 
 An enterprise AI proof of concept under active development for reviewing credit-blocked B2B sales orders.
 
-**Current implementation:** input validation, deterministic eligibility, three synthetic scenarios and 11 test methods. Context collection, retrieval, risk evaluation, human review and execution are designed but not implemented. No LLM, live ERP connection or financial action is included.
+**Status: early-stage prototype.** Implemented today: input validation, deterministic eligibility, three synthetic scenarios, a readable demo and 15 tests. Context collection, retrieval, risk evaluation, human review and execution are designed but not implemented. No LLM, live ERP connection or financial action is included.
 
 ## Business problem
 
@@ -12,22 +12,67 @@ The target workflow collects this evidence, calculates risk using explicit rules
 
 ## Quick start
 
-Use Python 3.9 or later from the repository root. There are no third-party dependencies or API keys.
+Python 3.9 or later. No third-party dependencies or API keys.
 
 ```bash
-PYTHONPATH=src python3 -m order_exception
+git clone https://github.com/annadiakonu/agentic-order-exception-workflow
+cd agentic-order-exception-workflow
+
+PYTHONPATH=src python3 -m order_exception                 # run the demo
+PYTHONPATH=src python3 -m unittest discover -s tests -v   # run the tests
+```
+
+Add `--json` to the demo command to print the raw result objects.
+
+## Example run
+
+The eligibility gate answers one question: may this blocked order enter analysis? An order is admitted only if the block is credit-related, the value is EUR 50,000–250,000 inclusive, and the hard-stop flag is explicitly `false`. Admission is not approval.
+
+Real output of `PYTHONPATH=src python3 -m order_exception` on the three synthetic orders in `data/blocked_orders.json`:
+
+```text
+Eligibility gate - 3 synthetic blocked orders
+
+Order ORD-DEMO-001  |  customer CUST-DEMO-001
+  Block reason : credit_limit_exceeded
+  Order value  : EUR 120,000
+  Hard stop    : no
+  Checks       : [ok] credit block   [ok] value EUR 50k-250k   [ok] no hard stop
+  Result       : ADMITTED FOR ANALYSIS  (next step: collect_context)
+  Why          : All three entry conditions pass. This is not an approval; a human reviews every case.
+
+Order ORD-DEMO-002  |  customer CUST-DEMO-002
+  Block reason : credit_exposure_exceeded
+  Order value  : EUR 180,000
+  Hard stop    : yes
+  Checks       : [ok] credit block   [ok] value EUR 50k-250k   [x] no hard stop
+  Result       : MANUAL REVIEW  (next step: manual_review)
+  Why          : A hard stop is set. It must be investigated, never bypassed.
+
+Order ORD-DEMO-003  |  customer CUST-DEMO-003
+  Block reason : credit_limit_exceeded
+  Order value  : EUR 160,000
+  Hard stop    : unknown (null)
+  Checks       : not run - input validation failed
+  Result       : INPUT INVALID -> MANUAL REVIEW  (next step: manual_review)
+  Why          : Hard-stop status is unknown. Unknown is never treated as 'no'.
+```
+
+The three outcomes map to the result contract: `completed / eligible=true`, `completed / eligible=false` and `failed / eligible=null`. The CLI returns route labels; it does not yet invoke collectors or a manual-review service.
+
+## Tests
+
+```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-The CLI reads `data/blocked_orders.json` and prints eligibility results:
+```text
+Ran 15 tests in 0.002s
 
-| Order | Input | Expected outcome |
-| --- | --- | --- |
-| ORD-DEMO-001 | EUR 120,000; credit block; no hard stop | Eligible for context collection |
-| ORD-DEMO-002 | EUR 180,000; hard stop present | Valid but ineligible; manual review |
-| ORD-DEMO-003 | EUR 160,000; unknown hard stop | Validation failed; manual review |
+OK
+```
 
-An eligible result is admission to analysis, not approval to release. These are expected results derived from the code; see the test command for executable checks.
+The tests cover the inclusive EUR 50k/250k boundaries, both credit block reasons, hard-stop handling, unknown or coerced values (`null`, `"false"`, `0`, `NaN`, `True`), unsupported currency, missing identifiers, preservation of every failure reason, and that the demo output never presents admission as approval.
 
 ## Architecture
 
@@ -47,7 +92,7 @@ flowchart TD
     S -.-> X["Mock ERP action and audit"]
 ```
 
-The current CLI returns route labels; it does not invoke collectors or provide a manual-review interface. [Full decision flow](docs/decision-flow.md) includes failures, information requests and execution reconciliation.
+[Full decision flow](docs/decision-flow.md) includes failures, information requests and execution reconciliation.
 
 ## Design principles
 
@@ -67,9 +112,10 @@ Python standard library: `dataclasses`, `decimal`, `json` and `unittest`. LangGr
 | Path | Purpose |
 | --- | --- |
 | `src/order_exception/eligibility.py` | Implemented validation and eligibility rules |
-| `src/order_exception/__main__.py` | Synthetic eligibility demo |
+| `src/order_exception/__main__.py` | Synthetic demo with readable and `--json` output |
 | `data/blocked_orders.json` | Three synthetic ERP events |
 | `tests/test_eligibility.py` | Boundary and invalid-input tests |
+| `tests/test_demo.py` | Demo output never overclaims a decision |
 | [Architecture](docs/architecture.md) | Components, interfaces and implementation status |
 | [Decision flow](docs/decision-flow.md) | End-to-end target workflow |
 | [Guardrails](docs/guardrails.md) | Controls, enforcement and failure behaviour |
@@ -89,3 +135,7 @@ Python standard library: `dataclasses`, `decimal`, `json` and `unittest`. LangGr
 This is not yet an end-to-end agentic demo. There is no persistent case registry, deduplication, RAG, LLM integration, reviewer authentication, approval service, execution adapter or audit store. The CLI expects a trusted fixture containing event objects; it is not a hardened ingestion endpoint.
 
 All data and thresholds are illustrative. No production readiness, recovered revenue or measured efficiency gains are claimed.
+
+## License
+
+[MIT](LICENSE) © 2026 Anna Diakonu
