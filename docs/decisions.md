@@ -1,27 +1,26 @@
-# Decisions and open questions
+# Architecture decisions
 
-## Recovered baseline
+## 1. Keep business gates deterministic
 
-Design baseline established in July 2026 and reviewed in September 2026.
+Eligibility and risk thresholds are explicit. Implement them as Python rules with boundary tests, rather than asking an LLM to classify orders. This gives reproducible decisions and makes missing data distinguishable from ineligibility.
 
-- One credit-related B2B exception workflow with synthetic data.
-- Three eligibility conditions: credit block, EUR 50k–250k inclusive, no hard stop.
-- Parallel business and policy context collection; both must complete before assessment.
-- Low: all criteria pass — payment rate >=97%, exceedance <=EUR25k, overdue <=7 days, Strategic, no critical escalation.
-- High: any trigger — payment rate <90%, exceedance >EUR75k, overdue >30 days, critical escalation present.
-- Otherwise Medium, provided all required inputs are valid. High triggers take precedence over Low classification.
-- Risk, authority and routing are deterministic; LLM explains, without changing the result.
-- All cases require human review before any mock release or limit change.
-- Every decision and execution must be traceable. Unknown input must never become invented evidence.
-- Contract, policy and applicable mandatory restrictions jointly constrain actions.
+An LLM may explain a result using supplied evidence. Its output cannot change risk, permissions, routing or approval validity.
 
-These thresholds are illustrative business assumptions, not externally validated credit policy.
+## 2. Separate business facts from policy evidence
 
-## New decision: reviewer authority, October 4, 2026
+ERP/CRM collection and document retrieval require different validation and provenance. Separate collectors can run in parallel; a join gate prevents incomplete context from entering assessment.
 
-Anna selected: a senior reviewer may review their own risk level and lower levels.
+The trade-off is additional state and failure handling. A single conversational agent would be simpler to prompt but would obscure which source is missing and who owns a decision.
 
-Proposed hierarchical matrix for the prototype:
+## 3. Build an offline baseline first
+
+Use standard-library Python, synthetic ERP/CRM records and explicit policy rules before adding model APIs or a vector store. This keeps the demo reproducible without paid services and provides reference scenarios for future retrieval evaluation.
+
+Structured fixture lookup is not RAG. Describe RAG as implemented only after retrieval and grounded generation exist and are evaluated.
+
+## 4. Human approval for every action
+
+The system prepares a recommendation; a human authorises the selected action. A Low classification does not grant automatic release.
 
 | Verified role | Low | Medium | High |
 | --- | --- | --- | --- |
@@ -29,20 +28,37 @@ Proposed hierarchical matrix for the prototype:
 | Credit Manager | Yes | Yes | No |
 | Senior Credit Manager | Yes | Yes | Yes |
 
-Default routing remains Low -> Analyst, Medium -> Manager, High -> Senior Manager. Having authority does not automatically assign a case. The reassignment procedure remains to be designed.
+Default routing follows the risk level. Higher authority permits review of lower levels only with valid assignment. It never permits bypassing a hard stop or document restriction.
 
-Role authority never permits an action prohibited by policy, contract or a hard stop. Demonstration identities will be synthetic. Production identity verification and permissions are not implemented in milestone 1.
+## 5. Intersect action permissions
 
-## Collaboration
+Credit policy, supply agreement and approval SOP have different responsibilities. A permissive rule in one document cannot cancel a restriction in another. Silence is not permission.
 
-Codex prepares small implementation increments, documentation and checks. Anna owns business choices and explains the examples back in her own words. Changes are discussed in terms of inputs, outputs, permitted actions and failure behavior before adding framework complexity.
+If no action is clearly permitted, escalate. Keep blocked is a fallback only when it does not conflict with an applicable obligation.
 
-## Open before later milestones
+## 6. Bind approval to facts and action parameters
 
-- Bind assigned reviewer identity to a trusted session; select demo authentication mechanism.
-- Define reassignment, absence handling and expiry of approvals.
-- Finalize monetary/action parameters and partial-release semantics.
-- Define permitted-action mappings using coherent synthetic policy/contract/SOP documents.
-- Define assessment freshness, context revision changes and legal/compliance source boundaries.
-- Choose LLM provider, retrieval storage and LangGraph persistence.
-- Reconcile status names in the older discussion into one transition table.
+Approve an exact context revision and action payload. Recheck material facts before execution. Even a change within the same risk band can affect the permitted amount or recommendation.
+
+This adds a review cycle when facts change, but avoids executing a stale decision.
+
+## 7. Reconcile uncertain execution
+
+Use a stable operation ID. After a timeout, inspect the ERP outcome before retrying. A retry may otherwise repeat a release or credit-limit change.
+
+Local idempotency alone does not guarantee exactly-once execution across systems. The mock adapter must expose a reconciliation lookup to demonstrate that distinction.
+
+## 8. Defer framework selection until persistence is needed
+
+Current code has one synchronous gate. LangGraph could support future branches and human-review pause/resume, but introducing it now would not implement those business capabilities by itself.
+
+Keep contracts independent of a framework. Select persistence and orchestration together when durable cases are implemented.
+
+## Open implementation decisions
+
+- Demo identities, assignment, reassignment and approval expiry.
+- Partial-release allocation and temporary-limit amount/duration limits.
+- Effective synthetic policies and contractual obligation/conflict semantics.
+- Material-fact comparison, freshness window and source failure handling.
+- Persistent case/operation store and concurrency control.
+- Retrieval evaluation dataset, model provider and explanation validation.
